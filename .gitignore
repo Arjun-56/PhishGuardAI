@@ -5,9 +5,9 @@ data/archive/
 data/.maintenance*
 data/training_history.json
 
-# Models
-models/
-*.pkl
+# Models - DEPLOY TO AWS (uncommented)
+# models/
+# *.pkl
 
 # Python
 __pycache__/
