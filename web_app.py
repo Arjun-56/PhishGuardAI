@@ -23,6 +23,11 @@ def load_components():
     """Load model and components"""
     try:
         model = joblib.load('models/xgboost_model.pkl')
+        
+        # Fix XGBoost version compatibility (remove deprecated use_label_encoder)
+        if hasattr(model, 'use_label_encoder'):
+            delattr(model, 'use_label_encoder')
+        
         feature_names = joblib.load('models/feature_names.pkl')
         brand_detector = BrandDetector()
         explainer = URLExplainer(model, feature_names)
