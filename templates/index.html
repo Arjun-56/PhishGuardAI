@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard AI - Phishing Detection</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 40px 20px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .shield-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        /* Main Card */
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            margin: 0 auto 30px;
+        }
+
+        /* Input Section */
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 18px 25px;
+            border: 3px solid #e0e0e0;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+            outline: none;
+        }
+
+        .url-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 18px 35px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Result Section */
+        .result {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .result.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-card {
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .result-card.safe {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 2px solid #28a745;
+        }
+
+        .result-card.suspicious {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+            border: 2px solid #ffc107;
+        }
+
+        .result-card.phishing {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border: 2px solid #dc3545;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .result-icon {
+            font-size: 3rem;
+        }
+
+        .result-title {
+            flex: 1;
+        }
+
+        .result-title h2 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .result-title p {
+            opacity: 0.8;
+        }
+
+        /* Risk Score Gauge */
+        .risk-gauge-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 0 auto;
+        }
+
+        .risk-gauge {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .risk-gauge-bg {
+            fill: none;
+            stroke: #e0e0e0;
+            stroke-width: 12;
+        }
+
+        .risk-gauge-fill {
+            fill: none;
+            stroke-width: 12;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease-in-out;
+            transform-origin: center;
+        }
+
+        .risk-gauge-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .risk-gauge-number {
+            font-size: 2.2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .risk-gauge-label {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .risk-score {
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .risk-score-value {
+            font-size: 3rem;
+            font-weight: 700;
+        }
+
+        .risk-score-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        /* Result Details */
+        .result-details {
+            background: rgba(255,255,255,0.5);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .result-details p {
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .brand-warning {
+            background: #dc3545;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .brand-warning i {
+            font-size: 1.5rem;
+        }
+
+        /* Info Section */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .info-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .info-card p {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: white;
+            opacity: 0.8;
+        }
+
+        .footer a {
+            color: white;
+            text-decoration: underline;
+        }
+
+        /* Error Message */
+        .error-message {
+            display: none;
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .error-message.active {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* How It Works Section */
+        .how-it-works {
+            margin-top: 30px;
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .step-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px 20px;
+            text-align: center;
+            position: relative;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .step-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+        }
+
+        .step-number {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .step-card i {
+            font-size: 2.5rem;
+            color: #667eea;
+            margin: 15px 0;
+            display: block;
+        }
+
+        .step-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .step-card p {
+            color: #666;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* SHAP Section */
+        .shap-section {
+            margin-top: 30px;
+        }
+
+        .shap-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .shap-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .shap-feature-item {
+            text-align: center;
+            padding: 25px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 12px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s;
+        }
+
+        .shap-feature-item:hover {
+            border-color: #667eea;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+        }
+
+        .shap-feature-item i {
+            font-size: 2.5rem;
+            color: #667eea;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .shap-feature-item h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .shap-feature-item p {
+            color: #666;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .shap-example {
+            border-left: 4px solid #667eea;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .result-header {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <i class="fas fa-shield-alt shield-icon"></i>
+            <h1>PhishGuard AI</h1>
+            <p>Advanced Phishing Detection with Explainable AI</p>
+        </div>
+
+        <!-- Main Card -->
+        <div class="main-card">
+            <!-- Input Section -->
+            <div class="input-section">
+                <div class="input-group">
+                    <input type="text" class="url-input" id="urlInput" placeholder="Enter a URL to analyze (e.g., https://example.com)">
+                    <button class="btn btn-primary" onclick="analyzeUrl()">
+                        <i class="fas fa-search"></i>
+                        Analyze URL
+                    </button>
+                </div>
+                <div style="text-align: center;">
+                    <button class="btn btn-secondary" onclick="tryExample()">
+                        <i class="fas fa-flask"></i>
+                        Try Example
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error Message -->
+            <div class="error-message" id="errorMessage">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="errorText">Please enter a valid URL</span>
+            </div>
+
+            <!-- Loading -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing URL...</p>
+            </div>
+
+            <!-- Result -->
+            <div class="result" id="result">
+                <div class="result-card" id="resultCard">
+                    <div class="result-header">
+                        <i class="fas fa-check-circle result-icon" id="resultIcon"></i>
+                        <div class="result-title">
+                            <h2 id="resultTitle">Safe to Proceed</h2>
+                            <p id="resultSubtitle">This URL appears legitimate</p>
+                        </div>
+                        <div class="risk-score">
+                            <div class="risk-score-value" id="riskScore">0%</div>
+                            <div class="risk-score-label">Risk Score</div>
+                        </div>
+                    </div>
+                    <div class="result-details">
+                        <p id="resultDetails">No suspicious indicators detected.</p>
+                    </div>
+                    <div class="ai-explanation" id="aiExplanation" style="display: none; margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 12px; border-left: 4px solid #667eea;">
+                        <h4 style="color: #667eea; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                            <i class="fas fa-brain"></i> AI Explanation (SHAP Values)
+                        </h4>
+                        <p id="explanationSummary" style="color: #555; line-height: 1.6; margin-bottom: 15px;"></p>
+                        <div id="topFactors" style="margin-top: 15px;">
+                            <h5 style="color: #333; margin-bottom: 10px; font-size: 0.95rem;">Key Risk Factors:</h5>
+                            <ul id="factorsList" style="list-style: none; padding: 0;">
+                            </ul>
+                        </div>
+                        <div class="shap-note" style="margin-top: 15px; padding: 12px; background: white; border-radius: 8px; font-size: 0.9rem; color: #666;">
+                            <i class="fas fa-info-circle" style="color: #667eea;"></i> 
+                            <strong>How SHAP works:</strong> Values show how much each feature pushed the prediction toward phishing (+) or safe (-). Higher values = stronger impact.
+                        </div>
+                    </div>
+                    <div class="brand-warning" id="brandWarning" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>
+                            <strong>Brand Impersonation Detected!</strong>
+                            <p id="brandDetails"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- URL Features -->
+                <div class="info-grid" id="featuresGrid" style="display: none;">
+                    <div class="info-card">
+                        <h3><i class="fas fa-link"></i> URL Length</h3>
+                        <p id="urlLength">-</p>
+                    </div>
+                    <div class="info-card">
+                        <h3><i class="fas fa-layer-group"></i> Subdomains</h3>
+                        <p id="subdomainCount">-</p>
+                    </div>
+                    <div class="info-card">
+                        <h3><i class="fas fa-folder-tree"></i> Path Depth</h3>
+                        <p id="pathDepth">-</p>
+                    </div>
+                    <div class="info-card">
+                        <h3><i class="fas fa-random"></i> Entropy</h3>
+                        <p id="entropy">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk Gauge -->
+            <div class="risk-gauge-container" id="riskGaugeContainer" style="margin: 30px auto;">
+                <svg class="risk-gauge" viewBox="0 0 100 100">
+                    <circle class="risk-gauge-bg" cx="50" cy="50" r="40"></circle>
+                    <circle class="risk-gauge-fill" id="riskGaugeFill" cx="50" cy="50" r="40" 
+                            stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
+                </svg>
+                <div class="risk-gauge-value">
+                    <div class="risk-gauge-number" id="riskGaugeNumber">0%</div>
+                    <div class="risk-gauge-label">Risk Score</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- How It Works Section -->
+        <div class="main-card how-it-works">
+            <h2 style="text-align: center; color: #667eea; margin-bottom: 30px;">
+                <i class="fas fa-cogs"></i> How It Works
+            </h2>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <i class="fas fa-link"></i>
+                    <h3>URL Analysis</h3>
+                    <p>We extract 32+ features from your URL including length, domain structure, subdomains, and special characters.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <i class="fas fa-brain"></i>
+                    <h3>AI Detection</h3>
+                    <p>Our XGBoost machine learning model, trained on 600+ URLs, analyzes patterns to detect phishing indicators.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>Brand Check</h3>
+                    <p>We check for brand impersonation by comparing against 20+ known brands and detecting lookalike domains.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">4</div>
+                    <i class="fas fa-chart-pie"></i>
+                    <h3>Risk Score</h3>
+                    <p>You get an instant risk score (0-100%) with detailed explanation of why the URL is safe or suspicious.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Disclaimer:</strong> This is an educational tool. Do not rely solely on automated detection for security decisions.</p>
+            <p>Model: XGBoost with SHAP Explainability | Datasets: OpenPhish, Tranco</p>
+        </div>
+    </div>
+
+    <script>
+        // Allow Enter key to submit
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                analyzeUrl();
+            }
+        });
+
+        function tryExample() {
+            document.getElementById('urlInput').value = 'http://paypal-secure-login.suspicious-domain.tk';
+            analyzeUrl();
+        }
+
+        async function analyzeUrl() {
+            const urlInput = document.getElementById('urlInput');
+            const url = urlInput.value.trim();
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const errorMessage = document.getElementById('errorMessage');
+
+            // Reset
+            errorMessage.classList.remove('active');
+            result.classList.remove('active');
+
+            // Validate
+            if (!url) {
+                document.getElementById('errorText').textContent = 'Please enter a URL to analyze';
+                errorMessage.classList.add('active');
+                return;
+            }
+
+            // Show loading
+            loading.classList.add('active');
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                // Hide loading
+                loading.classList.remove('active');
+
+                // Show result
+                displayResult(data);
+
+            } catch (error) {
+                loading.classList.remove('active');
+                document.getElementById('errorText').textContent = 'An error occurred. Please try again.';
+                errorMessage.classList.add('active');
+                console.error('Error:', error);
+            }
+        }
+
+        function updateRiskGauge(percentage, color) {
+            const gaugeFill = document.getElementById('riskGaugeFill');
+            const gaugeNumber = document.getElementById('riskGaugeNumber');
+            const circumference = 2 * Math.PI * 40; // r=40
+            
+            // Calculate offset
+            const offset = circumference - (percentage / 100) * circumference;
+            
+            // Set color and animate
+            gaugeFill.style.stroke = color;
+            gaugeFill.style.strokeDashoffset = offset;
+            gaugeNumber.textContent = percentage + '%';
+            gaugeNumber.style.color = color;
+        }
+
+        function displayResult(data) {
+            const result = document.getElementById('result');
+            const resultCard = document.getElementById('resultCard');
+            const resultIcon = document.getElementById('resultIcon');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultSubtitle = document.getElementById('resultSubtitle');
+            const riskScore = document.getElementById('riskScore');
+            const resultDetails = document.getElementById('resultDetails');
+            const brandWarning = document.getElementById('brandWarning');
+
+            // Remove old classes
+            resultCard.classList.remove('safe', 'suspicious', 'phishing');
+
+            // Set status based on result
+            if (data.status === 'safe') {
+                resultCard.classList.add('safe');
+                resultIcon.className = 'fas fa-check-circle result-icon';
+                resultIcon.style.color = '#28a745';
+                resultTitle.textContent = data.text || 'Safe to Proceed';
+                resultSubtitle.textContent = 'Low risk - This URL appears legitimate';
+                riskScore.style.color = '#28a745';
+            } else if (data.status === 'suspicious') {
+                resultCard.classList.add('suspicious');
+                resultIcon.className = 'fas fa-exclamation-triangle result-icon';
+                resultIcon.style.color = '#ffc107';
+                resultTitle.textContent = data.text || 'Potentially Unsafe';
+                resultSubtitle.textContent = 'Medium risk - Exercise caution';
+                riskScore.style.color = '#ffc107';
+            } else if (data.status === 'phishing') {
+                resultCard.classList.add('phishing');
+                resultIcon.className = 'fas fa-skull-crossbones result-icon';
+                resultIcon.style.color = '#dc3545';
+                resultTitle.textContent = data.text || 'Phishing Detected!';
+                resultSubtitle.textContent = 'High risk - Do not proceed';
+                riskScore.style.color = '#dc3545';
+            } else if (data.status === 'maintenance') {
+                resultCard.classList.add('suspicious');
+                resultIcon.className = 'fas fa-tools result-icon';
+                resultIcon.style.color = '#ffc107';
+                resultTitle.textContent = 'System Maintenance';
+                resultSubtitle.textContent = data.details;
+                riskScore.textContent = '-';
+                result.classList.add('active');
+                return;
+            } else {
+                resultCard.classList.add('suspicious');
+                resultIcon.className = 'fas fa-exclamation-circle result-icon';
+                resultTitle.textContent = data.text || 'Error';
+                resultSubtitle.textContent = data.details || 'Something went wrong';
+                riskScore.textContent = '-';
+                result.classList.add('active');
+                return;
+            }
+
+            // Set risk score
+            riskScore.textContent = data.risk_score || '0%';
+            
+            // Animate risk gauge
+            const riskValue = parseFloat(data.risk_score) || 0;
+            let gaugeColor = '#28a745'; // green
+            if (riskValue > 70) gaugeColor = '#dc3545'; // red
+            else if (riskValue > 40) gaugeColor = '#ffc107'; // yellow
+            updateRiskGauge(riskValue, gaugeColor);
+
+            // Set details
+            resultDetails.textContent = data.details || data.explanation || 'Analysis complete.';
+            
+            // Show AI Explanation with SHAP-style breakdown
+            const aiExplanation = document.getElementById('aiExplanation');
+            const explanationSummary = document.getElementById('explanationSummary');
+            const factorsList = document.getElementById('factorsList');
+            
+            if (data.explanation && data.explanation.length > 10) {
+                aiExplanation.style.display = 'block';
+                explanationSummary.textContent = data.explanation;
+                
+                // Show top factors from backend
+                factorsList.innerHTML = '';
+                
+                if (data.top_factors && data.top_factors.length > 0) {
+                    data.top_factors.forEach(factor => {
+                        const li = document.createElement('li');
+                        const impactPercent = Math.abs(factor.impact * 100).toFixed(0);
+                        const impactSign = factor.impact > 0 ? '+' : '-';
+                        const color = factor.impact > 0 ? '#dc3545' : '#28a745';
+                        
+                        li.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #dee2e6; font-size: 0.95rem;';
+                        li.innerHTML = `<span style="color: #333;"><i class="fas fa-${factor.impact > 0 ? 'arrow-up' : 'arrow-down'}" style="color: ${color}; margin-right: 8px;"></i>${factor.feature}</span><span style="color: ${color}; font-weight: 600;">${impactSign}${impactPercent}%</span>`;
+                        factorsList.appendChild(li);
+                    });
+                }
+                
+                // Add features analyzed count
+                if (data.features_analyzed) {
+                    const countLi = document.createElement('li');
+                    countLi.style.cssText = 'padding: 10px 0; font-size: 0.9rem; color: #667eea; font-style: italic; border-top: 2px solid #dee2e6; margin-top: 5px;';
+                    countLi.innerHTML = `<i class="fas fa-check-circle" style="margin-right: 8px;"></i>Total ${data.features_analyzed} features analyzed`;
+                    factorsList.appendChild(countLi);
+                }
+            } else {
+                aiExplanation.style.display = 'none';
+            }
+
+            // Show brand warning if present
+            if (data.brand_warning) {
+                brandWarning.style.display = 'flex';
+                document.getElementById('brandDetails').textContent = data.details;
+            } else {
+                brandWarning.style.display = 'none';
+            }
+
+            // Show result
+            result.classList.add('active');
+        }
+    </script>
+</body>
+</html>
