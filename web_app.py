@@ -202,6 +202,20 @@ def health_check():
         'maintenance_mode': is_maintenance_mode()
     })
 
+@app.route('/admin/maintenance/<action>')
+def admin_maintenance(action):
+    """Admin endpoint to toggle maintenance mode"""
+    from src.maintenance import enable_maintenance_mode, disable_maintenance_mode
+    
+    if action == 'enable':
+        enable_maintenance_mode(reason='Scheduled maintenance', estimated_minutes=30)
+        return jsonify({'status': 'success', 'message': 'Maintenance mode enabled'})
+    elif action == 'disable':
+        disable_maintenance_mode()
+        return jsonify({'status': 'success', 'message': 'Maintenance mode disabled'})
+    else:
+        return jsonify({'status': 'error', 'message': 'Invalid action'})
+
 if __name__ == '__main__':
     # Create templates directory
     Path('templates').mkdir(exist_ok=True)
