@@ -7,7 +7,8 @@ class LLMAnalyzer:
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY")
         )
-        self.model = "llama3-8b-8192"
+        # Make model configurable via environment variable
+        self.model = os.environ.get("GROQ_MODEL", "mixtral-8x7b-32768")
     
     def analyze_url(self, url):
         prompt = f"""
