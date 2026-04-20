@@ -140,7 +140,7 @@ def analyze_url():
         # Step 1: LLM Analysis (if available)
         if llm_analyzer:
             try:
-                llm_result = llm_analyzer.analyze(url)
+                llm_result = llm_analyzer.analyze_url(url)
                 llm_risk = llm_result.get('risk_score', 50)
                 
                 # If LLM says safe (risk < 30%), trust it (LLM is conservative for safe URLs)
