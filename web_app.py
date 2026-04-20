@@ -6,6 +6,7 @@ Connects the beautiful frontend with the ML backend
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import joblib
+from src.llm_analyzer import LLMAnalyzer
 from src.features import URLFeatureExtractor
 from src.brand_detector import BrandDetector
 from src.explainer import URLExplainer
@@ -18,26 +19,42 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__, static_folder='static')
 
-# Load ML components
+# Load both LLM and XGBoost components
 def load_components():
-    """Load model and components"""
+    """Load LLM analyzer and XGBoost model"""
+    llm_analyzer = None
+    model = None
+    feature_names = None
+    brand_detector = None
+    explainer = None
+    
+    # Load LLM Analyzer
+    try:
+        llm_analyzer = LLMAnalyzer()
+        print("✅ LLM Analyzer loaded successfully")
+    except Exception as e:
+        print(f"❌ Error loading LLM Analyzer: {e}")
+        print("⚠️ Make sure GROQ_API_KEY environment variable is set")
+    
+    # Load XGBoost Model
     try:
         model = joblib.load('models/xgboost_model.pkl')
         
-        # Fix XGBoost version compatibility (remove deprecated use_label_encoder)
+        # Fix XGBoost version compatibility
         if hasattr(model, 'use_label_encoder'):
             delattr(model, 'use_label_encoder')
         
         feature_names = joblib.load('models/feature_names.pkl')
         brand_detector = BrandDetector()
         explainer = URLExplainer(model, feature_names)
-        return model, feature_names, brand_detector, explainer
+        print("✅ XGBoost Model loaded successfully")
     except FileNotFoundError:
-        print("⚠️ Model not found. Please run `python scripts/train_model.py` first.")
-        return None, None, None, None
+        print("⚠️ XGBoost Model not found. Please run `python train_model.py` first.")
+    
+    return llm_analyzer, model, feature_names, brand_detector, explainer
 
 # Global components
-model, feature_names, brand_detector, explainer = load_components()
+llm_analyzer, model, feature_names, brand_detector, explainer = load_components()
 
 @app.route('/')
 def index():
@@ -50,7 +67,7 @@ def index():
 
 @app.route('/analyze', methods=['POST'])
 def analyze_url():
-    """Analyze URL endpoint"""
+    """Analyze URL endpoint using Hybrid LLM + XGBoost approach"""
     try:
         # Check maintenance mode
         if is_maintenance_mode():
@@ -61,13 +78,13 @@ def analyze_url():
                 'details': 'PhishGuard is updating with fresh threat data. Please try again in a few minutes.'
             })
         
-        # Check if model is loaded
-        if model is None:
+        # Check if at least one analyzer is loaded
+        if llm_analyzer is None and model is None:
             return jsonify({
                 'status': 'error',
                 'icon': 'fas fa-exclamation-circle',
                 'text': 'Service Unavailable',
-                'details': 'AI model is not available. Please contact administrator.'
+                'details': 'Neither LLM Analyzer nor XGBoost Model is available.'
             })
         
         data = request.get_json()
@@ -108,81 +125,157 @@ def analyze_url():
                 'details': f'This is a legitimate website ({domain}). The URL may have tracking parameters but the domain is trusted.',
                 'risk_score': '0.0%',
                 'brand_warning': False,
-                'explanation': 'Domain is in our whitelist of verified legitimate websites.'
+                'explanation': 'Domain is in our whitelist of verified legitimate websites.',
+                'top_factors': [],
+                'features_analyzed': 'Hybrid LLM + XGBoost'
             })
         
-        # Extract features
-        extractor = URLFeatureExtractor()
-        features = extractor.extract_single(url)
+        # HYBRID ANALYSIS LOGIC
+        llm_result = None
+        xgboost_result = None
+        final_status = 'suspicious'
+        final_risk_score = 50
+        final_reason = 'Analysis complete'
         
-        # Predict
-        X = pd.DataFrame([features])[feature_names]
-        risk_prob = model.predict_proba(X)[0][1]
+        # Step 1: LLM Analysis (if available)
+        if llm_analyzer:
+            try:
+                llm_result = llm_analyzer.analyze(url)
+                llm_risk = llm_result.get('risk_score', 50)
+                
+                # If LLM says safe (risk < 30%), trust it (LLM is conservative for safe URLs)
+                if llm_risk < 30:
+                    return jsonify({
+                        'status': 'safe',
+                        'icon': 'fas fa-check-circle',
+                        'text': 'Safe to Proceed',
+                        'details': llm_result.get('reason', 'LLM analysis indicates this URL is legitimate'),
+                        'risk_score': f"{llm_risk}%",
+                        'brand_warning': False,
+                        'explanation': llm_result.get('reason', ''),
+                        'top_factors': [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])],
+                        'features_analyzed': 'Hybrid LLM + XGBoost'
+                    })
+            except Exception as e:
+                print(f"LLM analysis failed: {e}")
         
-        # Brand check
-        brand_result = brand_detector.check_url(url)
+        # Step 2: XGBoost Analysis (if available and LLM says suspicious)
+        if model and feature_names:
+            try:
+                extractor = URLFeatureExtractor()
+                features = extractor.extract_single(url)
+                X = pd.DataFrame([features])[feature_names]
+                
+                # Apply label reversal fix
+                risk_prob = model.predict_proba(X)[0][1]
+                risk_prob = 1 - risk_prob  # FIX: Reverse the label reversal
+                
+                xgboost_risk = risk_prob * 100
+                xgboost_result = {'risk_score': xgboost_risk}
+                
+                # Brand check
+                brand_result = brand_detector.check_url(url)
+                
+                # Step 3: Decision Matrix
+                if llm_result and xgboost_result:
+                    llm_risk = llm_result.get('risk_score', 50)
+                    
+                    # Decision matrix logic
+                    if llm_risk < 30:
+                        final_status = 'safe'
+                        final_risk_score = llm_risk
+                        final_reason = llm_result.get('reason', 'LLM confirms safe')
+                    elif llm_risk < 70 and xgboost_risk < 40:
+                        final_status = 'safe'
+                        final_risk_score = (llm_risk + xgboost_risk) / 2
+                        final_reason = f"Both systems indicate safe (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
+                    elif llm_risk < 70 and 40 <= xgboost_risk < 70:
+                        final_status = 'suspicious'
+                        final_risk_score = (llm_risk + xgboost_risk) / 2
+                        final_reason = f"Systems disagree - conservative (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
+                    elif llm_risk < 70 and xgboost_risk >= 70:
+                        final_status = 'phishing'
+                        final_risk_score = xgboost_risk
+                        final_reason = f"XGBoost confident phishing (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
+                    elif llm_risk >= 70 and xgboost_risk < 40:
+                        final_status = 'suspicious'
+                        final_risk_score = (llm_risk + xgboost_risk) / 2
+                        final_reason = f"Systems disagree - conservative (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
+                    elif llm_risk >= 70 and 40 <= xgboost_risk < 70:
+                        final_status = 'phishing'
+                        final_risk_score = (llm_risk + xgboost_risk) / 2
+                        final_reason = f"Both systems indicate phishing (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
+                    else:  # Both >= 70
+                        final_status = 'phishing'
+                        final_risk_score = max(llm_risk, xgboost_risk)
+                        final_reason = f"Both systems confident phishing (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
+                    
+                    # Add brand warning if detected
+                    if brand_result.get('is_suspicious', False):
+                        if final_status == 'safe':
+                            final_status = 'suspicious'
+                        final_reason += f" Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}"
+                    
+                elif xgboost_result:  # Only XGBoost available
+                    if xgboost_risk < 40:
+                        final_status = 'safe'
+                        final_risk_score = xgboost_risk
+                        final_reason = f"XGBoost indicates safe ({xgboost_risk:.1f}%)"
+                    elif xgboost_risk < 70:
+                        final_status = 'suspicious'
+                        final_risk_score = xgboost_risk
+                        final_reason = f"XGBoost indicates suspicious ({xgboost_risk:.1f}%)"
+                    else:
+                        final_status = 'phishing'
+                        final_risk_score = xgboost_risk
+                        final_reason = f"XGBoost indicates phishing ({xgboost_risk:.1f}%)"
+                    
+                    # Add brand warning if detected
+                    if brand_result.get('is_suspicious', False):
+                        if final_status == 'safe':
+                            final_status = 'suspicious'
+                        final_reason += f" Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}"
+                
+            except Exception as e:
+                print(f"XGBoost analysis failed: {e}")
         
-        # Get explanation
-        explanation = explainer.explain(url, features, risk_prob)
+        # Step 4: If only LLM available and it said suspicious
+        if llm_result and not xgboost_result:
+            llm_risk = llm_result.get('risk_score', 50)
+            if llm_risk < 40:
+                final_status = 'safe'
+                final_risk_score = llm_risk
+            elif llm_risk < 70:
+                final_status = 'suspicious'
+                final_risk_score = llm_risk
+            else:
+                final_status = 'phishing'
+                final_risk_score = llm_risk
+            final_reason = llm_result.get('reason', 'LLM analysis')
         
-        # Determine result status
-        if risk_prob > 0.7:
-            status = 'phishing'
-            icon = 'fas fa-skull-crossbones'
-            text = 'Phishing Detected!'
-            details = f'High risk ({risk_prob*100:.1f}% confidence). This URL shows strong indicators of phishing.'
-        elif risk_prob > 0.4:
-            status = 'suspicious'
-            icon = 'fas fa-exclamation-triangle'
-            text = 'Potentially Unsafe'
-            details = f'Medium risk ({risk_prob*100:.1f}% confidence). This URL has suspicious characteristics.'
-        else:
-            status = 'safe'
-            icon = 'fas fa-check-circle'
-            text = 'Safe to Proceed'
-            details = f'Low risk ({risk_prob*100:.1f}% confidence). This URL appears legitimate.'
+        # Map status to icon and text
+        icon_mapping = {
+            'safe': 'fas fa-check-circle',
+            'suspicious': 'fas fa-exclamation-triangle',
+            'phishing': 'fas fa-skull-crossbones'
+        }
         
-        # Add brand warning if detected
-        if brand_result['is_suspicious']:
-            if status == 'safe':
-                status = 'suspicious'
-                icon = 'fas fa-exclamation-triangle'
-                text = 'Brand Impersonation Detected'
-            details += f' Brand impersonation detected: {brand_result["matched_brand"]} ({brand_result["reason"]}).'
-        
-        # Add top risk factors
-        risk_factors = []
-        for factor in explanation['top_factors'][:3]:
-            if factor['impact'] > 0:
-                risk_factors.append(factor['feature'])
-        
-        if risk_factors:
-            details += f' Key concerns: {", ".join(risk_factors)}.'
-        
-        # Build detailed explanation with SHAP-style breakdown
-        detailed_explanation = explanation['summary']
-        if len(detailed_explanation) > 300:
-            detailed_explanation = detailed_explanation[:297] + '...'
-        
-        # Add top factors with impact scores
-        factors_data = []
-        for factor in explanation['top_factors'][:5]:
-            factors_data.append({
-                'feature': factor['feature'],
-                'description': factor['description'],
-                'impact': factor['impact']
-            })
+        text_mapping = {
+            'safe': 'Safe to Proceed',
+            'suspicious': 'Potentially Unsafe',
+            'phishing': 'Phishing Detected!'
+        }
         
         return jsonify({
-            'status': status,
-            'icon': icon,
-            'text': text,
-            'details': details,
-            'risk_score': f'{risk_prob*100:.1f}%',
-            'brand_warning': brand_result['is_suspicious'],
-            'explanation': detailed_explanation,
-            'top_factors': factors_data,
-            'features_analyzed': len(features)
+            'status': final_status,
+            'icon': icon_mapping.get(final_status, 'fas fa-exclamation-triangle'),
+            'text': text_mapping.get(final_status, 'Potentially Unsafe'),
+            'details': final_reason,
+            'risk_score': f"{final_risk_score:.1f}%",
+            'brand_warning': brand_result.get('is_suspicious', False) if 'brand_result' in locals() else False,
+            'explanation': final_reason,
+            'top_factors': [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])] if llm_result else [],
+            'features_analyzed': 'Hybrid LLM + XGBoost'
         })
         
     except Exception as e:
@@ -198,7 +291,8 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'model_loaded': model is not None,
+        'llm_loaded': llm_analyzer is not None,
+        'xgboost_loaded': model is not None,
         'maintenance_mode': is_maintenance_mode()
     })
 
