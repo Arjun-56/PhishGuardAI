@@ -266,6 +266,14 @@ def analyze_url():
             'phishing': 'Phishing Detected!'
         }
         
+        # Use LLM explanation if available, otherwise use final_reason
+        if llm_result and llm_result.get('reason'):
+            explanation_text = llm_result.get('reason')
+            explanation_factors = [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])]
+        else:
+            explanation_text = final_reason
+            explanation_factors = []
+        
         return jsonify({
             'status': final_status,
             'icon': icon_mapping.get(final_status, 'fas fa-exclamation-triangle'),
@@ -273,8 +281,8 @@ def analyze_url():
             'details': final_reason,
             'risk_score': f"{final_risk_score:.1f}%",
             'brand_warning': brand_result.get('is_suspicious', False) if 'brand_result' in locals() else False,
-            'explanation': final_reason,
-            'top_factors': [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])] if llm_result else [],
+            'explanation': explanation_text,
+            'top_factors': explanation_factors,
             'features_analyzed': 'Hybrid LLM + XGBoost'
         })
         
