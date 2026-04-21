@@ -146,6 +146,9 @@ def analyze_url():
         final_risk_score = 50
         final_reason = 'Analysis complete'
         
+        # Brand Detection Check (runs early to override all decisions)
+        brand_result = brand_detector.check_url(url)
+        
         # Step 1: LLM Analysis (if available)
         if llm_analyzer:
             try:
@@ -153,17 +156,31 @@ def analyze_url():
                 llm_risk = llm_result.get('risk_score', 50)
                 
                 # If LLM says safe (risk < 30%), trust it (LLM is conservative for safe URLs)
+                # BUT check brand detection first - if brand impersonation, force phishing
                 if llm_risk < 30:
-                    return jsonify({
-                        'status': 'safe',
-                        'icon': 'fas fa-check-circle',
-                        'text': 'Safe to Proceed',
-                        'details': llm_result.get('reason', 'LLM analysis indicates this URL is legitimate'),
-                        'brand_warning': False,
-                        'explanation': llm_result.get('reason', ''),
-                        'top_factors': [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])],
-                        'features_analyzed': 'Hybrid LLM + XGBoost'
-                    })
+                    if brand_result.get('is_suspicious', False):
+                        # Brand detection overrides LLM safe
+                        return jsonify({
+                            'status': 'phishing',
+                            'icon': 'fas fa-skull-crossbones',
+                            'text': 'Phishing Detected!',
+                            'details': f"Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}. {brand_result.get('reason', '')}",
+                            'brand_warning': True,
+                            'explanation': f"Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}. {brand_result.get('reason', '')}",
+                            'top_factors': [],
+                            'features_analyzed': 'Hybrid LLM + XGBoost'
+                        })
+                    else:
+                        return jsonify({
+                            'status': 'safe',
+                            'icon': 'fas fa-check-circle',
+                            'text': 'Safe to Proceed',
+                            'details': llm_result.get('reason', 'LLM analysis indicates this URL is legitimate'),
+                            'brand_warning': False,
+                            'explanation': llm_result.get('reason', ''),
+                            'top_factors': [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])],
+                            'features_analyzed': 'Hybrid LLM + XGBoost'
+                        })
             except Exception as e:
                 print(f"LLM analysis failed: {e}")
         
@@ -218,11 +235,10 @@ def analyze_url():
                         final_risk_score = max(llm_risk, xgboost_risk)
                         final_reason = f"Both systems confident phishing (LLM: {llm_risk}%, XGBoost: {xgboost_risk:.1f}%)"
                     
-                    # Add brand warning if detected
+                    # Add brand warning if detected - force phishing status (complete override)
                     if brand_result.get('is_suspicious', False):
-                        if final_status == 'safe':
-                            final_status = 'suspicious'
-                        final_reason += f" Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}"
+                        final_status = 'phishing'
+                        final_reason = f"Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}. {brand_result.get('reason', '')}"
                     
                 elif xgboost_result:  # Only XGBoost available
                     if xgboost_risk < 40:
@@ -238,11 +254,10 @@ def analyze_url():
                         final_risk_score = xgboost_risk
                         final_reason = f"XGBoost indicates phishing ({xgboost_risk:.1f}%)"
                     
-                    # Add brand warning if detected
+                    # Add brand warning if detected - force phishing status (complete override)
                     if brand_result.get('is_suspicious', False):
-                        if final_status == 'safe':
-                            final_status = 'suspicious'
-                        final_reason += f" Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}"
+                        final_status = 'phishing'
+                        final_reason = f"Brand impersonation detected: {brand_result.get('matched_brand', 'unknown')}. {brand_result.get('reason', '')}"
                 
             except Exception as e:
                 print(f"XGBoost analysis failed: {e}")
