@@ -98,6 +98,16 @@ def analyze_url():
                 'details': 'Please enter a valid URL.'
             })
         
+        # Validate URL format - reject random text
+        # Check if it looks like a URL or domain (contains at least one dot)
+        if '.' not in url:
+            return jsonify({
+                'status': 'error',
+                'icon': 'fas fa-exclamation-circle',
+                'text': 'Invalid Input',
+                'details': 'Please give in URL format (e.g., google.com or https://google.com)'
+            })
+        
         # Add protocol if missing
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
