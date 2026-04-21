@@ -308,7 +308,7 @@ def analyze_url():
                     
                     # Get top features by absolute SHAP value
                     feature_importance = sorted(zip(feature_names, shap_values), key=lambda x: abs(x[1]), reverse=True)[:10]
-                    shap_factors = [{'feature': name, 'description': name, 'impact': value} for name, value in feature_importance]
+                    shap_factors = [{'feature': name, 'description': name, 'impact': float(value)} for name, value in feature_importance]
             except Exception as e:
                 print(f"SHAP calculation failed: {e}")
         
