@@ -289,13 +289,37 @@ def analyze_url():
             'phishing': 'Phishing Detected!'
         }
         
-        # Use LLM explanation if available, otherwise use final_reason
-        if llm_result and llm_result.get('reason'):
-            explanation_text = llm_result.get('reason')
-            explanation_factors = [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])]
-        else:
-            explanation_text = final_reason
-            explanation_factors = []
+        # Combine both SHAP (XGBoost) and AI (LLM) explanations
+        llm_explanation = llm_result.get('reason', '') if llm_result else ''
+        llm_factors = [{'feature': factor, 'description': factor, 'impact': 0} for factor in llm_result.get('key_factors', [])] if llm_result else []
+        
+        # Add SHAP-style feature importance from XGBoost if available
+        shap_factors = []
+        if xgboost_result and model and feature_names:
+            try:
+                extractor = URLFeatureExtractor()
+                features = extractor.extract_single(url)
+                if features:
+                    X = pd.DataFrame([features])[feature_names]
+                    # Get feature importance from model
+                    import shap
+                    explainer = shap.TreeExplainer(model)
+                    shap_values = explainer.shap_values(X)[0]
+                    
+                    # Get top features by absolute SHAP value
+                    feature_importance = sorted(zip(feature_names, shap_values), key=lambda x: abs(x[1]), reverse=True)[:10]
+                    shap_factors = [{'feature': name, 'description': name, 'impact': value} for name, value in feature_importance]
+            except Exception as e:
+                print(f"SHAP calculation failed: {e}")
+        
+        # Combine both explanations
+        combined_explanation = llm_explanation
+        if llm_explanation and shap_factors:
+            combined_explanation += "\n\nKey features from ML model:"
+            for factor in shap_factors[:5]:
+                impact = factor['impact']
+                sign = '+' if impact > 0 else ''
+                combined_explanation += f"\n• {factor['feature']}: {sign}{impact:.3f}"
         
         return jsonify({
             'status': final_status,
@@ -303,8 +327,10 @@ def analyze_url():
             'text': text_mapping.get(final_status, 'Potentially Unsafe'),
             'details': final_reason,
             'brand_warning': brand_result.get('is_suspicious', False) if 'brand_result' in locals() else False,
-            'explanation': explanation_text,
-            'top_factors': explanation_factors,
+            'explanation': combined_explanation,
+            'top_factors': shap_factors if shap_factors else llm_factors,
+            'llm_explanation': llm_explanation,
+            'shap_factors': shap_factors,
             'features_analyzed': 'Hybrid LLM + XGBoost'
         })
         
