@@ -35,11 +35,16 @@ class URLFeatureExtractor:
     
     def extract_single(self, url):
         """Extract features from a single URL"""
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
-            
-        parsed = urlparse(url)
-        extracted = tldextract.extract(url)
+        try:
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+                
+            parsed = urlparse(url)
+            extracted = tldextract.extract(url)
+        except (ValueError, Exception) as e:
+            # Skip invalid URLs (e.g., invalid IPv6 URLs)
+            print(f"Skipping invalid URL: {url} - Error: {e}")
+            return None
         
         domain = f"{extracted.domain}.{extracted.suffix}"
         subdomain = extracted.subdomain

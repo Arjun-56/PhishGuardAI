@@ -30,25 +30,28 @@ def main():
     print("\n2. Extracting features...")
     extractor = URLFeatureExtractor()
     features_list = []
+    valid_labels = []
     
-    for idx, url in enumerate(df['url']):
+    for idx, (url, label) in enumerate(zip(df['url'], df['label'])):
         if idx % 1000 == 0:
             print(f"Processed {idx}/{len(df)} URLs...")
         features = extractor.extract_single(url)
-        features_list.append(features)
+        if features is not None:
+            features_list.append(features)
+            valid_labels.append(label)
     
     features_df = pd.DataFrame(features_list)
     print(f"Extracted {len(features_df.columns)} features")
     
     # Save processed data
     features_df.to_csv('data/processed/features.csv', index=False)
-    df['label'].to_csv('data/processed/labels.csv', index=False)
-    print("Features saved to data/processed/")
+    pd.Series(valid_labels).to_csv('data/processed/labels.csv', index=False)
+    print(f"Features saved to data/processed/ (valid URLs: {len(features_df)})")
     
     # Train model
     print("\n3. Training model...")
     model = PhishingModel()
-    results = model.train(features_df, df['label'])
+    results = model.train(features_df, pd.Series(valid_labels))
     
     # Save model
     print("\n4. Saving model...")
