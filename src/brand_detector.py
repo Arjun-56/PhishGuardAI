@@ -96,7 +96,8 @@ class BrandDetector:
                 similarity = self._domain_similarity(domain, official)
                 
                 # High similarity but not exact match = potential typosquatting
-                if 0.7 < similarity < 1.0:
+                # Lowered threshold from 0.7 to 0.5 to catch more typosquatting attempts
+                if 0.5 < similarity < 1.0:
                     result['is_suspicious'] = True
                     result['matched_brand'] = brand.title()
                     result['similarity'] = similarity
